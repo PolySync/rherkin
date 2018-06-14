@@ -1,0 +1,9 @@
+[package]
+name = "rherkin"
+version = "0.1.0"
+authors = ["Rusell Mull <rmull@polysync.io>"]
+
+[dependencies]
+combine = "3.3.2"
+error-chain = "0.11.0"
+itertools = "0.6.4"
