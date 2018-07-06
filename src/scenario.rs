@@ -3,7 +3,7 @@ use combine::Parser;
 use combine::Stream;
 use itertools;
 
-use feature::{self, BoxedTestCase, TestCase, TestContext};
+use feature::{BoxedTestCase, TestCase, TestContext};
 
 struct Scenario<TC: TestContext> {
     name: String,
@@ -12,7 +12,7 @@ struct Scenario<TC: TestContext> {
 
 /// A specific step which makes up a test context. Users should create there own
 /// implementations of this trait, which are returned by their step parsers.
-trait Step<C: TestContext> {
+pub trait Step<C: TestContext> {
     fn eval(&self, &mut C) -> bool;
 }
 
@@ -67,7 +67,7 @@ where
 ///
 /// * `given`, `when`, `then` : User-defined parsers to parse and produce
 /// `Step`s out of the text after `Given`, `When`, and `Then`, respectively.
-fn parser<I, TC, GP, WP, TP>(
+pub fn parser<I, TC, GP, WP, TP>(
     given: GP,
     when: WP,
     then: TP,
@@ -81,7 +81,7 @@ where
     I::Error: ParseError<I::Item, I::Range, I::Position>,
 {
     use combine::char::{newline, string};
-    use combine::{many, many1, none_of, optional, Parser};
+    use combine::{many, none_of, optional, Parser};
 
     let scenario_prefix = || string("Scenario: ");
 
@@ -117,7 +117,7 @@ where
 mod tests {
     use super::*;
 
-    use combine::stream::easy;
+    use feature;
     use combine::stream::state::State;
 
     /// The sample test case just records each step as it runs
@@ -145,7 +145,7 @@ mod tests {
     }
 
     #[test]
-    fn feature() {
+    fn scenario() {
         let s = "Feature: my feature\n\
                  \n\
                  Scenario: One\n\
