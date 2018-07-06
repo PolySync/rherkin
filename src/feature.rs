@@ -19,14 +19,14 @@ pub trait TestCase<C: TestContext> {
 
 /// A feature is a collection of tests.
 // TODO: Implement background
-struct Feature<C: TestContext> {
-    name: String,
-    comment: String,
-    test_cases: Vec<Box<TestCase<C>>>,
+pub struct Feature<C: TestContext> {
+    pub name: String,
+    pub comment: String,
+    pub test_cases: Vec<Box<TestCase<C>>>,
 }
 
 impl<C: TestContext> Feature<C> {
-    fn eval(&self) -> (bool, C) {
+    pub fn eval(&self) -> (bool, C) {
         let mut context = C::new();
 
         for tc in self.test_cases.iter() {
@@ -46,21 +46,21 @@ impl<C: TestContext> Feature<C> {
 /// but there's some subtle issue to do with using trait objects in an
 /// associated type, perhaps in concert with the 'impl trait' feature, that
 /// keeps it from working. Wrapping it in a struct is a workaround.
-struct TestCaseParseResult<C: TestContext> {
-    out: Box<TestCase<C>>,
+pub struct BoxedTestCase<C: TestContext> {
+    pub val: Box<TestCase<C>>,
 }
 
 /// Construct a feature file parser, built around a test-case parser.
-fn parser<I, C, TP>(test_case_parser: TP) -> impl Parser<Input = I, Output = Feature<C>>
+pub fn parser<I, C, TP>(test_case_parser: TP) -> impl Parser<Input = I, Output = Feature<C>>
 where
     C: TestContext,
-    TP: Parser<Input = I, Output = TestCaseParseResult<C>>,
+    TP: Parser<Input = I, Output = BoxedTestCase<C>>,
     I: Stream<Item = char>,
     I::Error: ParseError<I::Item, I::Range, I::Position>,
 {
     let test_cases =
-        sep_by(test_case_parser, newline()).map(|results: Vec<TestCaseParseResult<C>>| {
-            results.into_iter().map(|result| result.out).collect()
+        sep_by(test_case_parser, newline()).map(|results: Vec<BoxedTestCase<C>>| {
+            results.into_iter().map(|result| result.val).collect()
         });
 
     struct_parser! {
@@ -109,7 +109,7 @@ mod tests {
         }
     }
 
-    fn sample_test_case_parser<'a, I>() -> impl Parser<Input = I, Output = TestCaseParseResult<SampleTestContext>>
+    fn sample_test_case_parser<'a, I>() -> impl Parser<Input = I, Output = BoxedTestCase<SampleTestContext>>
     where
         I: Stream<Item = char>,
         I::Error: ParseError<I::Item, I::Range, I::Position>,
@@ -122,7 +122,7 @@ mod tests {
             }
         };
 
-        p.map(|stc| TestCaseParseResult { out: Box::new(stc) })
+        p.map(|stc| BoxedTestCase { val: Box::new(stc) })
     }
 
     #[test]
