@@ -14,6 +14,7 @@ pub trait TestContext {
 
 /// A test case is a generalization of a Scenario; might also be a PropTest.
 pub trait TestCase<C: TestContext> {
+    fn name(&self) -> String;
     fn eval(&self, C) -> (bool, C);
 }
 
@@ -102,6 +103,10 @@ mod tests {
     }
 
     impl TestCase<SampleTestContext> for SampleTestCase {
+        fn name(&self) -> String {
+            self.name.clone()
+        }
+
         fn eval(&self, mut context: SampleTestContext) -> (bool, SampleTestContext) {
             context.executed_cases.push(self.name.clone());
             context.executed_contents.push(self.content.clone());
@@ -145,6 +150,8 @@ mod tests {
         assert_eq!(feat.name, "my feature".to_string());
         assert_eq!(feat.comment, "comment line one\ncomment line two".to_string());
         assert_eq!(feat.test_cases.len(), 2);
+        assert_eq!(feat.test_cases[0].name(), "first".clone());
+        assert_eq!(feat.test_cases[1].name(), "second".clone());
 
         let (pass, ctx) = feat.eval();
         assert!(pass);

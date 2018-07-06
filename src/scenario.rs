@@ -17,6 +17,10 @@ trait Step<C: TestContext> {
 }
 
 impl<C: TestContext> TestCase<C> for Scenario<C> {
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+
     /// Execute a scenario by creating a new test context, then running each
     /// step in order with mutable access to the context.
     fn eval(&self, mut context: C) -> (bool, C) {
@@ -173,6 +177,8 @@ mod tests {
         assert_eq!(feat.name, "my feature".to_string());
         assert_eq!(feat.comment, "".to_string());
         assert_eq!(feat.test_cases.len(), 2);
+        assert_eq!(feat.test_cases[0].name(), "One".clone());
+        assert_eq!(feat.test_cases[1].name(), "Two".clone());
 
         let (pass, ctx) = feat.eval();
         assert!(pass);
