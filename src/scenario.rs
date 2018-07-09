@@ -1,6 +1,7 @@
-use combine::ParseError;
-use combine::Parser;
-use combine::Stream;
+use combine::{ParseError, Parser, Stream, many, token, optional};
+use combine::char::string;
+use parse_utils::{eol, until_eol};
+
 use itertools;
 
 use feature::{BoxedTestCase, TestCase, TestContext};
@@ -49,11 +50,8 @@ where
     I: Stream<Item = char>,
     I::Error: ParseError<I::Item, I::Range, I::Position>,
 {
-    use combine::char::{newline, string};
-    use combine::{many, token};
-
-    let first_line = (string(prefix), token(' '), inner.clone(), newline()).map(|t| t.2);
-    let and_line = (string("And "), inner, newline()).map(|t| t.1);
+    let first_line = (string(prefix), token(' '), inner.clone(), eol()).map(|t| t.2);
+    let and_line = (string("And "), inner, eol()).map(|t| t.1);
     (first_line, many(and_line)).map(|(first, mut ands): (BoxedStep<TC>, Vec<BoxedStep<TC>>)| {
         ands.insert(0, first);
         ands
@@ -80,19 +78,6 @@ where
     I: Stream<Item = char>,
     I::Error: ParseError<I::Item, I::Range, I::Position>,
 {
-    use combine::char::{newline, string};
-    use combine::{many, none_of, optional, Parser};
-
-    let scenario_prefix = || string("Scenario: ");
-
-    let non_newline = || none_of("\r\n".chars());
-
-    // Parse until a newline; return everything before the newline character.
-    let until_eol = || (many(non_newline()), newline()).map(|(s, _): (String, _)| s);
-
-    // Parse a line with the given prefix
-    let prefixed_line = |prefix| (prefix, until_eol()).map(|(_, text): (_, String)| text);
-
     let givens = scenario_block_parser("Given", given);
     let whens = scenario_block_parser("When", when);
     let thens = scenario_block_parser("Then", then);
@@ -103,12 +88,13 @@ where
         optional(thens).map(|o| o.unwrap_or(vec![])),
     ).map(|(g, w, t)| itertools::concat(vec![g, w, t]));
 
-    let scenario = (prefixed_line(scenario_prefix()), steps).map(
-        |(name, steps): (String, Vec<BoxedStep<TC>>)| Scenario {
-            name: name,
-            steps: steps.into_iter().map(|s| s.val).collect(),
-        },
-    );
+    let scenario = struct_parser! {
+        Scenario {
+            _: string("Scenario: "),
+            name: until_eol(),
+            steps: steps.map(|x| x.into_iter().map(|s| s.val).collect()),
+        }
+    };
 
     scenario.map(|sc| BoxedTestCase { val: Box::new(sc) })
 }

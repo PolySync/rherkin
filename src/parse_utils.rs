@@ -5,7 +5,7 @@ use combine::Stream;
 use combine::ParseError;
 
 use combine::char::newline;
-use combine::{Parser, many, many1, none_of, try};
+use combine::{Parser, many, many1, none_of, try, eof};
 
 /// Match a single non-newline character
 ///
@@ -31,9 +31,36 @@ where I: Stream<Item = char>,
     none_of("\r\n".chars())
 }
 
-/// Parse one or more characters up to the next newline character, consuming it.
-/// Return the characters consumed on the way to the newline, but not the
-/// newline.
+
+/// Parse either a newline() or an end-of-file marker, consuming any parsed
+/// characters.
+/// # Examples
+//
+/// ```
+/// # extern crate combine;
+/// # extern crate rherkin;
+/// # use combine::*;
+/// # use rherkin::parse_utils::eol;
+/// # fn main() {
+/// let mut parser1 = eol();
+/// let result1 = parser1.parse("\n");
+/// assert_eq!(result1, Ok(((), "")));
+///
+/// let mut parser2 = eol();
+/// let result2 = parser2.parse("");
+/// assert_eq!(result2, Ok(((), "")));
+/// # }
+/// ```
+pub fn eol<I>() -> impl Parser<Input = I, Output = ()>
+where I: Stream<Item = char>,
+      I::Error: ParseError<I::Item, I::Range, I::Position>
+{
+    choice! { newline().map(|_| ()), eof() }
+}
+
+/// Parse one or more characters up to the end of line, using `eol()`. Return
+/// the characters consumed on the way to the line end, but not any newline
+/// character.
 ///
 /// # Examples
 //
@@ -43,17 +70,20 @@ where I: Stream<Item = char>,
 /// # use combine::*;
 /// # use rherkin::parse_utils::until_eol;
 /// # fn main() {
-/// let mut parser = until_eol();
-/// let result = parser.parse("abc\ndef");
-/// assert_eq!(result, Ok(("abc".to_string(), "def")));
+/// let mut parser1 = until_eol();
+/// let result1 = parser1.parse("abc\ndef");
+/// assert_eq!(result1, Ok(("abc".to_string(), "def")));
+///
+/// let mut parser2 = until_eol();
+/// let result2 = parser2.parse("def");
+/// assert_eq!(result2, Ok(("def".to_string(), "")));
 /// # }
 /// ```
 pub fn until_eol<I>() -> impl Parser<Input = I, Output = String>
 where I: Stream<Item = char>,
       I::Error: ParseError<I::Item, I::Range, I::Position>
 {
-    ( many1(non_newline()), newline() )
-        .map(|(s, _)| s)
+    ( many1(non_newline()), eol()).map(|(s, _)| s)
 }
 
 
