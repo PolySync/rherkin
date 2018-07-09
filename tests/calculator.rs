@@ -6,8 +6,9 @@ use combine::stream::state::State;
 use combine::char::{string, digit};
 
 extern crate rherkin;
-use rherkin::feature::{self, TestContext};
-use rherkin::scenario::{self, Step, BoxedStep};
+//use rherkin::feature;
+//use rherkin::scenario::{self, Step, BoxedStep, TestContext};
+use rherkin::{ast, parser};
 
 // An rpn calculator, something we can write tests for.
 #[derive(Debug)]
@@ -80,7 +81,7 @@ impl Calculator {
     }
 }
 
-impl TestContext for Calculator {
+impl ast::TestContext for Calculator {
     fn new() -> Calculator {
         Calculator {
             current: vec!(),
@@ -93,7 +94,7 @@ mod steps {
     use super::*;
 
     pub struct Clear { }
-    impl Step<Calculator> for Clear {
+    impl ast::Step<Calculator> for Clear {
         fn eval(&self, calc: &mut Calculator) -> bool {
             println!("Clear");
             calc.current = vec!();
@@ -103,7 +104,7 @@ mod steps {
     }
 
     pub struct Press { pub button: Button }
-    impl Step<Calculator> for Press {
+    impl ast::Step<Calculator> for Press {
         fn eval(&self, calc: &mut Calculator) -> bool {
             println!("Press {:?}", self.button);
             calc.press(&self.button)
@@ -111,7 +112,7 @@ mod steps {
     }
 
     pub struct CheckDisplay { pub expected: String }
-    impl Step<Calculator> for CheckDisplay {
+    impl ast::Step<Calculator> for CheckDisplay {
         fn eval(&self, calc: &mut Calculator) -> bool {
             let actual = calc.stack.last();
             println!("Check display: expected {:?}, actual {:#?}", self.expected, actual);
@@ -177,11 +178,11 @@ Then the display should read 2
     let then = choice! { check_display };
 
     let mut p =
-        feature::parser(
-            scenario::parser(
-                given.map(|x| BoxedStep { val: Box::new(x) }),
-                when.map(|x| BoxedStep { val: Box::new(x) }),
-                then.map(|x| BoxedStep { val: Box::new(x) })));
+        parser::feature(
+            parser::scenario(
+                given.map(|x| parser::BoxedStep { val: Box::new(x) }),
+                when.map (|x| parser::BoxedStep { val: Box::new(x) }),
+                then.map (|x| parser::BoxedStep { val: Box::new(x) })));
 
     let (f, remaining) = p.easy_parse(State::new(spec)).unwrap();
 
@@ -189,3 +190,21 @@ Then the display should read 2
     assert!(success);
 }
 
+
+// fn proptests() {
+//     let spec = r#"
+// Feature: RPN Calculator Property Specs
+
+// PropSpec: arbitrary addition
+// Given a fresh calculator
+// And a number A less than 10000
+// And a number B less than 10000
+// When I enter the number A
+// And I press enter
+// And I enter the number B
+// And I press plus
+// Then the displayed value should be less than 20000
+// "#;
+
+//     assert!(true)
+// }

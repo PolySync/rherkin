@@ -3,8 +3,8 @@ extern crate combine;
 
 extern crate itertools;
 
-pub mod feature;
-pub mod scenario;
+pub mod parser;
+pub mod ast;
 pub mod parse_utils;
 
 

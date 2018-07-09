@@ -1,46 +1,19 @@
-use combine::{ParseError, Parser, Stream, many, token, optional};
-use combine::char::string;
-use parse_utils::{eol, until_eol};
-
+use ast::{Step, TestContext, TestCase, Feature, Scenario};
 use itertools;
 
-use feature::{BoxedTestCase, TestCase, TestContext};
+use combine::ParseError;
+use combine::Parser;
+use combine::Stream;
 
-struct Scenario<TC: TestContext> {
-    name: String,
-    steps: Vec<Box<Step<TC>>>,
-}
-
-/// A specific step which makes up a test context. Users should create there own
-/// implementations of this trait, which are returned by their step parsers.
-pub trait Step<C: TestContext> {
-    fn eval(&self, &mut C) -> bool;
-}
-
-impl<C: TestContext> TestCase<C> for Scenario<C> {
-    fn name(&self) -> String {
-        self.name.clone()
-    }
-
-    /// Execute a scenario by creating a new test context, then running each
-    /// step in order with mutable access to the context.
-    fn eval(&self, mut context: C) -> (bool, C) {
-        // let mut ctx = TC::new();
-        for s in self.steps.iter() {
-            if !s.eval(&mut context) {
-                return (false, context);
-            }
-        }
-
-        (true, context)
-    }
-}
+use combine::char::{newline, string};
+use combine::{many, many1, sep_by, optional, token};
+use parse_utils::{line_block, until_eol, eol};
 
 pub struct BoxedStep<C: TestContext> {
     pub val: Box<Step<C>>,
 }
 
-fn scenario_block_parser<I, TC, P>(
+fn scenario_block<I, TC, P>(
     prefix: &'static str,
     inner: P,
 ) -> impl Parser<Input = I, Output = Vec<BoxedStep<TC>>>
@@ -58,6 +31,7 @@ where
     })
 }
 
+
 /// A `TestCase` parser for classic Cucumber-style Scenarios; this parser (or a
 /// composition thereof) should be passed to feature::parser.
 ///
@@ -65,11 +39,11 @@ where
 ///
 /// * `given`, `when`, `then` : User-defined parsers to parse and produce
 /// `Step`s out of the text after `Given`, `When`, and `Then`, respectively.
-pub fn parser<I, TC, GP, WP, TP>(
+pub fn scenario<I, TC, GP, WP, TP>(
     given: GP,
     when: WP,
     then: TP,
-) -> impl Parser<Input = I, Output = BoxedTestCase<TC>>
+) -> impl Parser<Input = I, Output = TestCase<TC>>
 where
     TC: TestContext + 'static,
     GP: Parser<Input = I, Output = BoxedStep<TC>> + Clone,
@@ -78,9 +52,9 @@ where
     I: Stream<Item = char>,
     I::Error: ParseError<I::Item, I::Range, I::Position>,
 {
-    let givens = scenario_block_parser("Given", given);
-    let whens = scenario_block_parser("When", when);
-    let thens = scenario_block_parser("Then", then);
+    let givens = scenario_block("Given", given);
+    let whens = scenario_block("When", when);
+    let thens = scenario_block("Then", then);
 
     let steps = (
         optional(givens).map(|o| o.unwrap_or(vec![])),
@@ -96,14 +70,39 @@ where
         }
     };
 
-    scenario.map(|sc| BoxedTestCase { val: Box::new(sc) })
+    scenario.map(|s| TestCase::Scenario(s))
 }
+
+
+/// Construct a feature file parser, built around a test-case parser.
+pub fn feature<I, C, TP>(test_case_parser: TP) -> impl Parser<Input = I, Output = Feature<C>>
+where
+    C: TestContext,
+    TP: Parser<Input = I, Output = TestCase<C>>,
+    I: Stream<Item = char>,
+    I::Error: ParseError<I::Item, I::Range, I::Position>,
+{
+    let blank_lines = || many1::<Vec<_>, _>(newline());
+
+    let test_cases = sep_by(test_case_parser, blank_lines());
+
+    struct_parser! {
+        Feature {
+            _: optional(blank_lines()),
+            _: string("Feature: "),
+            name: until_eol(),
+            comment: line_block(),
+            _: blank_lines(),
+            test_cases: test_cases
+        }
+    }
+}
+
+
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use feature;
     use combine::stream::state::State;
 
     /// The sample test case just records each step as it runs
@@ -130,20 +129,7 @@ mod tests {
         }
     }
 
-    #[test]
-    fn scenario() {
-        let s = "Feature: my feature\n\
-                 \n\
-                 Scenario: One\n\
-                 Given G1\n\
-                 When W1\n\
-                 Then T1\n\
-                 \n\
-                 Scenario: Two\n\
-                 Given G2\n\
-                 When W2\n\
-                 Then T2\n";
-
+    fn do_parse(s: &str) -> Feature<SampleTestContext> {
         use combine::char::digit;
         use combine::token;
 
@@ -152,13 +138,61 @@ mod tests {
         let when = struct_parser! { SampleStep { _: token('W'), num: num_digit() } };
         let then = struct_parser! { SampleStep { _: token('T'), num: num_digit() } };
 
-        let (feat, remaining) = feature::parser(parser(
+        let (feat, remaining) = feature(scenario(
             given.map(|x| BoxedStep { val: Box::new(x) }),
             when.map(|x| BoxedStep { val: Box::new(x) }),
             then.map(|x| BoxedStep { val: Box::new(x) }),
         )).easy_parse(State::new(s))
             .unwrap();
+
         println!("End state: {:#?}", remaining);
+
+        feat
+    }
+
+    #[test]
+    fn test_parse() {
+        let feat = do_parse(r"
+Feature: my feature
+one
+two
+
+Scenario: One
+Given G1
+When W1
+Then T1
+
+Scenario: Two
+Given G2
+When W2
+Then T2");
+
+        assert_eq!(feat.name, "my feature".to_string());
+        assert_eq!(feat.comment, "one\ntwo".to_string());
+        assert_eq!(feat.test_cases.len(), 2);
+        assert_eq!(feat.test_cases[0].name(), "One".clone());
+        assert_eq!(feat.test_cases[1].name(), "Two".clone());
+
+        let (pass, ctx) = feat.eval();
+        assert!(pass);
+        assert_eq!(ctx.executed_steps, vec![1, 1, 1, 2, 2, 2]);
+    }
+
+    #[test]
+    fn test_parse_extra_whitespace() {
+        let feat = do_parse(r"
+Feature: my feature
+
+Scenario: One
+Given G1
+When W1
+Then T1
+
+Scenario: Two
+Given G2
+When W2
+Then T2
+");
 
         assert_eq!(feat.name, "my feature".to_string());
         assert_eq!(feat.comment, "".to_string());
@@ -170,4 +204,5 @@ mod tests {
         assert!(pass);
         assert_eq!(ctx.executed_steps, vec![1, 1, 1, 2, 2, 2]);
     }
+
 }
