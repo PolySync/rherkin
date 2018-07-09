@@ -3,7 +3,7 @@ use combine::Parser;
 use combine::Stream;
 
 use combine::char::{newline, string};
-use combine::sep_by;
+use combine::{many1, sep_by, optional};
 use parse_utils::{line_block, until_eol};
 
 /// A test context is used to pass state between different steps of a test case.
@@ -59,17 +59,20 @@ where
     I: Stream<Item = char>,
     I::Error: ParseError<I::Item, I::Range, I::Position>,
 {
+    let blank_lines = || many1::<Vec<_>, _>(newline());
+
     let test_cases =
-        sep_by(test_case_parser, newline()).map(|results: Vec<BoxedTestCase<C>>| {
+        sep_by(test_case_parser, blank_lines()).map(|results: Vec<BoxedTestCase<C>>| {
             results.into_iter().map(|result| result.val).collect()
         });
 
     struct_parser! {
         Feature {
+            _: optional(blank_lines()),
             _: string("Feature: "),
             name: until_eol(),
             comment: line_block(),
-            _: newline(),
+            _: blank_lines(),
             test_cases: test_cases
         }
     }
@@ -78,8 +81,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use combine::stream::easy;
     use combine::stream::state::State;
 
     /// The sample test case just records each test in this context as it runs
@@ -140,7 +141,7 @@ mod tests {
                  Content one\n\
                  \n\
                  Sample Test Case: second\n\
-                 Content two\n";
+                 Content two";
 
         let (feat, remaining) = parser(sample_test_case_parser())
             .easy_parse(State::new(s))
@@ -159,5 +160,57 @@ mod tests {
                    vec!("first".to_string(), "second".to_string()));
         assert_eq!(ctx.executed_contents,
                    vec!("Content one".to_string(), "Content two".to_string()));
+    }
+
+    #[test]
+    fn multiple_blank_lines() {
+        let s = "Feature: my feature\n\
+                 comment line one\n\
+                 comment line two\n\
+                 \n\
+                 \n\
+                 Sample Test Case: first\n\
+                 Content one\n\
+                 \n\
+                 \n\
+                 Sample Test Case: second\n\
+                 Content two";
+
+        let (feat, remaining) = parser(sample_test_case_parser())
+            .parse(s)
+            .unwrap();
+
+        assert_eq!(remaining, "");
+        assert_eq!(feat.test_cases.len(), 2);
+    }
+
+    #[test]
+    fn no_trailing_newline() {
+        let s = "Feature: my feature\n\
+                 \n\
+                 Sample Test Case: first\n\
+                 Content one";
+
+        let (feat, remaining) = parser(sample_test_case_parser())
+            .parse(s)
+            .unwrap();
+
+        assert_eq!(remaining, "");
+        assert_eq!(feat.test_cases.len(), 1);
+    }
+
+    #[test]
+    fn leading_whitespace() {
+        let s = "\nFeature: my feature\n\
+                 \n\
+                 Sample Test Case: first\n\
+                 Content one";
+
+        let (feat, remaining) = parser(sample_test_case_parser())
+            .parse(s)
+            .unwrap();
+
+        assert_eq!(remaining, "");
+        assert_eq!(feat.test_cases.len(), 1);
     }
 }

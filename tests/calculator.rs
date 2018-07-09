@@ -127,7 +127,8 @@ mod steps {
 
 #[test]
 fn scenarios() {
-    let spec = r#"Feature: RPN Calculator Arithmetic
+    let spec = r#"
+Feature: RPN Calculator Arithmetic
 The calculator supports basic addition, subtraction, multiplication, and
 division operations.
 
@@ -137,8 +138,7 @@ When I press 1
 And I press enter
 And I press 1
 And I press plus
-Then the display should read 2
-"#;
+Then the display should read 2"#;
 
     use steps::*;
 
@@ -183,7 +183,7 @@ Then the display should read 2
                 when.map(|x| BoxedStep { val: Box::new(x) }),
                 then.map(|x| BoxedStep { val: Box::new(x) })));
 
-    let (f, remaining) = p.easy_parse(State::new(spec)).unwrap();
+    let (f, _) = p.easy_parse(State::new(spec)).unwrap();
 
     let (success, _) = f.eval();
     assert!(success);

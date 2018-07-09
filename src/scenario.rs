@@ -50,10 +50,12 @@ where
     I::Error: ParseError<I::Item, I::Range, I::Position>,
 {
     use combine::char::{newline, string};
-    use combine::{many, token};
+    use combine::{many, token, eof};
 
-    let first_line = (string(prefix), token(' '), inner.clone(), newline()).map(|t| t.2);
-    let and_line = (string("And "), inner, newline()).map(|t| t.1);
+    let line_end = || choice!(newline().map(|_| ()), eof());
+
+    let first_line = (string(prefix), token(' '), inner.clone(), line_end()).map(|t| t.2);
+    let and_line = (string("And "), inner, line_end()).map(|t| t.1);
     (first_line, many(and_line)).map(|(first, mut ands): (BoxedStep<TC>, Vec<BoxedStep<TC>>)| {
         ands.insert(0, first);
         ands
@@ -156,7 +158,7 @@ mod tests {
                  Scenario: Two\n\
                  Given G2\n\
                  When W2\n\
-                 Then T2\n";
+                 Then T2";
 
         use combine::char::digit;
         use combine::token;

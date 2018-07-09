@@ -5,7 +5,7 @@ use combine::Stream;
 use combine::ParseError;
 
 use combine::char::newline;
-use combine::{Parser, many, many1, none_of, try};
+use combine::{Parser, many, many1, none_of, try, eof};
 
 /// Match a single non-newline character
 ///
@@ -31,9 +31,9 @@ where I: Stream<Item = char>,
     none_of("\r\n".chars())
 }
 
-/// Parse one or more characters up to the next newline character, consuming it.
-/// Return the characters consumed on the way to the newline, but not the
-/// newline.
+/// Parse one or more characters up to the next newline character (or until
+/// eof), consuming it. Return the characters consumed on the way to the
+/// newline, but not the newline.
 ///
 /// # Examples
 //
@@ -52,7 +52,7 @@ pub fn until_eol<I>() -> impl Parser<Input = I, Output = String>
 where I: Stream<Item = char>,
       I::Error: ParseError<I::Item, I::Range, I::Position>
 {
-    ( many1(non_newline()), newline() )
+    ( many1(non_newline()), choice! { newline().map(|_| ()), eof() } )
         .map(|(s, _)| s)
 }
 
