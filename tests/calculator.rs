@@ -179,15 +179,16 @@ Then the display should read 2
 
     let mut p =
         parser::feature(
-            parser::scenario(
-                given.map(|x| parser::BoxedStep { val: Box::new(x) }),
-                when.map (|x| parser::BoxedStep { val: Box::new(x) }),
-                then.map (|x| parser::BoxedStep { val: Box::new(x) })));
+            given.map(|x| parser::BoxedStep { val: Box::new(x) }),
+            when.map (|x| parser::BoxedStep { val: Box::new(x) }),
+            then.map (|x| parser::BoxedStep { val: Box::new(x) }));
 
-    let (f, remaining) = p.easy_parse(State::new(spec)).unwrap();
+    let (f, _remaining) = p.easy_parse(State::new(spec)).unwrap();
 
-    let (success, _) = f.eval();
-    assert!(success);
+    let results = f.eval();
+    for r in results {
+        assert!(r.pass);
+    }
 }
 
 
